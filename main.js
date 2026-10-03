@@ -1029,6 +1029,20 @@ async function createEntity(app, entityKeyOrFolder, rawName) {
 
   await ensureFolderSync(app, folder);
   const safeName = (rawName || `Untitled ${label}`).replace(/[\\/:*?"<>|]/g, '-').trim() || 'Untitled';
+
+  // Same folder, same basename means this entity already exists, so return it
+  // instead of creating another. Without this guard the probe below finds the
+  // unnumbered file, appends " 2", and the next call appends " 3": every call
+  // creates a file, so the search never reaches the end of the space and the
+  // pile feeds itself. One contact reached 2,514 notes over eight days this way.
+  // Consistent with addVal, which already refuses to create on a basename match.
+  if (isEntity) {
+    const _dup = app.vault.getMarkdownFiles().find(f =>
+      f.path.indexOf(folder + '/') === 0 &&
+      f.basename.toLowerCase() === safeName.toLowerCase());
+    if (_dup) return _dup;
+  }
+
   let path = `${folder}/${safeName}.md`;
   let n = 2;
   while (app.vault.getAbstractFileByPath(path)) {
@@ -11703,7 +11717,21 @@ class CadencePlugin extends obsidian.Plugin {
               if (target) results.push(target);
             }
           } else if (str.includes(',')) {
-            str.split(',').forEach(s => {
+            // A comma inside brackets belongs to the name, not to the list.
+            // "Jane Doe (Sales Manager, Example Magazines)" was split into
+            // "Jane Doe (Sales Manager", and that truncated string was then
+            // created as a contact file. The separator is deliberate
+            // ("Alice, Bob" is two contacts), so split only at depth 0.
+            const _parts = [];
+            let _depth = 0, _cur = '';
+            for (const ch of str) {
+              if (ch === '(' || ch === '[') { _depth++; }
+              else if (ch === ')' || ch === ']') { if (_depth > 0) _depth--; }
+              if (ch === ',' && _depth === 0) { _parts.push(_cur); _cur = ''; }
+              else { _cur += ch; }
+            }
+            _parts.push(_cur);
+            _parts.forEach(s => {
               const item = s.trim();
               if (item) results.push(item);
             });
@@ -12065,7 +12093,21 @@ class CadencePlugin extends obsidian.Plugin {
               if (target) results.push(target);
             }
           } else if (str.includes(',')) {
-            str.split(',').forEach(s => {
+            // A comma inside brackets belongs to the name, not to the list.
+            // "Jane Doe (Sales Manager, Example Magazines)" was split into
+            // "Jane Doe (Sales Manager", and that truncated string was then
+            // created as a contact file. The separator is deliberate
+            // ("Alice, Bob" is two contacts), so split only at depth 0.
+            const _parts = [];
+            let _depth = 0, _cur = '';
+            for (const ch of str) {
+              if (ch === '(' || ch === '[') { _depth++; }
+              else if (ch === ')' || ch === ']') { if (_depth > 0) _depth--; }
+              if (ch === ',' && _depth === 0) { _parts.push(_cur); _cur = ''; }
+              else { _cur += ch; }
+            }
+            _parts.push(_cur);
+            _parts.forEach(s => {
               const item = s.trim();
               if (item) results.push(item);
             });
